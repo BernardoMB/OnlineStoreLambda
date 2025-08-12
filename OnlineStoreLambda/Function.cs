@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Mail;
 using System.Text.Json;
 using Amazon.Lambda.Core;
@@ -28,12 +29,13 @@ public class Function
         {
             new Recipient() { Email = personalEmail, Name = "Bernardo Mondragon Brozon"}
         };
-        await SendMessageFromVisitor(mailingList.List, senderData);
-        return "Email has been sent";
+        string res = await SendMessageFromVisitor(mailingList.List, senderData);
+        return res;
     }
 
-    private async Task SendMessageFromVisitor(List<Recipient> recipients, SenderData senderData)
+    private async Task<string> SendMessageFromVisitor(List<Recipient> recipients, SenderData senderData)
     {
+        string result = "";
         try
         {
             foreach (var recipient in recipients)
@@ -177,21 +179,20 @@ public class Function
                 ";
                 var msg = MailHelper.CreateSingleEmail(from, to, subject, plainTextContent, htmlContent);
                 Response? response = await client.SendEmailAsync(msg).ConfigureAwait(false);
-
-                var deserializedBody = await response.DeserializeResponseBodyAsync();
-                Console.WriteLine($"SendGrid deserialized response body: " + response.StatusCode);
-                foreach (var kvp in deserializedBody)
-                {
-                    Console.WriteLine($"{kvp.Key}: {kvp.Value}");
-                }
-
                 Console.WriteLine($"SendGrid reponse status: " + response.StatusCode);
+                string res = response.IsSuccessStatusCode 
+                    ? "Email sent successfully to " + recipient.Email 
+                    : "Failed to send email to " + recipient.Email;
+                Console.WriteLine(res);
+                result = res;
             }
         }
         catch (Exception e)
         {
             Console.WriteLine("{0} Exception caught.", e);
+            result = "Error sending email: " + e.Message;
             throw;
         }
+        return result;
     }
 }
