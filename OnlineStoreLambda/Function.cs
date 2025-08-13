@@ -1,7 +1,6 @@
-using System.Net;
-using System.Net.Mail;
-using System.Text.Json;
 using Amazon.Lambda.Core;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using OnlineStoreLambda.DTOs;
 using SendGrid;
 using SendGrid.Helpers.Mail;
@@ -11,18 +10,25 @@ using SendGrid.Helpers.Mail;
 
 namespace OnlineStoreLambda;
 
+public class ApiGatewayRequest
+{
+    public string Body { get; set; } = string.Empty;
+}
+
 public class Function
 {
-    
     /// <summary>
-    /// A simple function that takes a string and does a ToUpper
+    /// Function that processes the incoming sender data and sends an email to a predefined mailing list.
     /// </summary>
-    /// <param name="input">The event for the Lambda function handler to process.</param>
-    /// <param name="context">The ILambdaContext that provides methods for logging and describing the Lambda environment.</param>
+    /// <param name="senderData"></param>
+    /// <param name="context"></param>
     /// <returns></returns>
-    public async Task<string> FunctionHandler(SenderData senderData, ILambdaContext context)
+    public async Task<string> FunctionHandler(Stream inputStream, ILambdaContext context)
     {
-        //SenderData senderData = JsonSerializer.Deserialize<SenderData>(input); // In case the first parameter is string input
+        using var reader = new StreamReader(inputStream);
+        var rawRequest = await reader.ReadToEndAsync();
+        var apiRequest = JsonConvert.DeserializeObject<ApiGatewayRequest>(rawRequest);
+        SenderData senderData = JsonConvert.DeserializeObject<SenderData>(apiRequest?.Body ?? "");
         var mailingList = new MailingList();
         var personalEmail = Environment.GetEnvironmentVariable("PERSONAL_EMAIL");
         mailingList.List = new List<Recipient>()

@@ -1,17 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Text.Json.Serialization;
 
 namespace OnlineStoreLambda.DTOs
 {
     public class SenderData
     {
-        public string SenderFirstName { get; set; }
-        public string SenderLastName { get; set; }
-        public string SenderPhoneNumber { get; set; }
-        public string SenderEmailAddress { get; set; }
-        public string SenderMessage { get; set; }
+        [JsonPropertyName("SenderEmailAddress")]
+        public string SenderEmailAddress { get; set; } = string.Empty;
+        [JsonPropertyName("SenderFirstName")]
+        public string SenderFirstName { get; set; } = string.Empty;
+        [JsonPropertyName("SenderLastName")]
+        public string SenderLastName { get; set; } = string.Empty;
+        [JsonPropertyName("SenderMessage")]
+        public string SenderMessage { get; set; } = string.Empty;
+        [JsonPropertyName("SenderPhoneNumber")]
+        public string SenderPhoneNumber { get; set; } = string.Empty;
     }
 }
