@@ -2,8 +2,11 @@ using Amazon.Lambda.Core;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using OnlineStoreLambda.DTOs;
-using SendGrid;
-using SendGrid.Helpers.Mail;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
+using Microsoft.Extensions.Logging.Console;
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
@@ -17,6 +20,35 @@ public class ApiGatewayRequest
 
 public class Function
 {
+    private readonly MailService _mailService;
+    private readonly ILogger<Function> _logger;
+
+    public Function()
+    {
+        var serviceCollection = new ServiceCollection();
+        ConfigureServices(serviceCollection);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+
+        _mailService = serviceProvider.GetRequiredService<MailService>();
+        _logger = serviceProvider.GetRequiredService<ILogger<Function>>();
+    }
+
+    private void ConfigureServices(IServiceCollection services)
+    {
+        var configBuilder = new ConfigurationBuilder()
+            .AddEnvironmentVariables();
+
+        var configuration = configBuilder.Build();
+
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddLogging(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Information);
+        });
+        services.AddSingleton<MailService>();
+    }
+
     /// <summary>
     /// Function that processes the incoming sender data and sends an email to a predefined mailing list.
     /// </summary>
@@ -39,7 +71,7 @@ public class Function
         return res;
     }
 
-    private async Task<string> SendMessageFromVisitor(List<Recipient> recipients, SenderData senderData)
+    private Task<string> SendMessageFromVisitor(List<Recipient> recipients, SenderData senderData)
     {
         string result = "";
         try
@@ -47,14 +79,11 @@ public class Function
             foreach (var recipient in recipients)
             {
                 var personalEmail = Environment.GetEnvironmentVariable("PERSONAL_EMAIL");
-                Console.WriteLine($"\nSending email from: {personalEmail}");
-                Console.WriteLine($"\nSending email to: {recipient.Name} :: {recipient.Email}");
-                var apiKey = Environment.GetEnvironmentVariable("SENDGRID_API_KEY");
-                var client = new SendGridClient(apiKey);
-                var from = new EmailAddress(personalEmail, "Bernardo Mondragon Brozon");
+                _logger.LogInformation("Sending email from: {FromEmail}", personalEmail);
+                _logger.LogInformation("Sending email to: {RecipientName} :: {RecipientEmail}", recipient.Name, recipient.Email);
+
                 var subject = "Message from visitor";
-                var to = new EmailAddress(recipient.Email, recipient.Name);
-                var plainTextContent = "";
+                var plainTextContent = $"Sender: {senderData.SenderFirstName} {senderData.SenderLastName}\nEmail: {senderData.SenderEmailAddress}\nPhone: {senderData.SenderPhoneNumber}\nMessage: {senderData.SenderMessage}";
                 var htmlContent = $@"<!DOCTYPE html>
                     <html lang=""en"">
                         <head>
@@ -183,22 +212,27 @@ public class Function
                         </body>
                     </html>
                 ";
-                var msg = MailHelper.CreateSingleEmail(from, to, subject, plainTextContent, htmlContent);
-                Response? response = await client.SendEmailAsync(msg).ConfigureAwait(false);
-                Console.WriteLine($"SendGrid reponse status: " + response.StatusCode);
-                string res = response.IsSuccessStatusCode 
-                    ? "Email sent successfully to " + recipient.Email 
-                    : "Failed to send email to " + recipient.Email;
-                Console.WriteLine(res);
-                result = res;
+
+                _mailService.SendEmail(
+                    fromAddress: personalEmail,
+                    fromDisplay: "Bernardo Mondragon Brozon",
+                    to: recipient.Email,
+                    cc: "",
+                    subject: subject,
+                    plainTextBody: plainTextContent,
+                    htmlBody: htmlContent
+                );
+
+                result = "Email sent successfully to " + recipient.Email;
+                _logger.LogInformation(result);
             }
         }
         catch (Exception e)
         {
-            Console.WriteLine("{0} Exception caught.", e);
+            _logger.LogError(e, "Exception caught while sending email");
             result = "Error sending email: " + e.Message;
             throw;
         }
-        return result;
+        return Task.FromResult(result);
     }
 }
